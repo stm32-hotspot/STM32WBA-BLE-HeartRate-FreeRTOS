@@ -19,10 +19,11 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include "app_common.h"
 #include "main.h"
-#include "stm32wbaxx.h"
+#include "app_common.h"
+#include "log_module.h"
 #include "blestack.h"
+#include "host_stack_if.h"
 #include "stm32_timer.h"
 #include "bleplat.h"
 #include "stm_list.h"
@@ -30,7 +31,7 @@
 #include "advanced_memory_manager.h"
 #include "app_conf.h"
 #include "ll_sys.h"
-#include "cmsis_os2.h"
+#include "stm32_rtos.h"
 
 /* Private typedef -----------------------------------------------------------*/
 typedef struct
@@ -41,52 +42,58 @@ typedef struct
 }BLE_TIMER_t;
 
 /* Private defines -----------------------------------------------------------*/
-/* BLE_TIMER_TASK related defines */
-#define BLE_TIMER_TASK_STACK_SIZE    (128 * 4)
-#define BLE_TIMER_TASK_PRIO          (osPriorityNormal)
 
 /* Private variables ---------------------------------------------------------*/
-tListNode BLE_TIMER_List;
-static BLE_TIMER_t* BLE_TIMER_timer;
+tListNode               BLE_TIMER_List;
+static BLE_TIMER_t      *BLE_TIMER_timer;
 
-/* BLE_TIMER_TASK related resources */
-osSemaphoreId_t     BleTimerSemaphore;
-osThreadId_t        BleTimerThread;
+/* FreeRTOS objects declaration */
+
+static osThreadId_t     BleTimerTaskHandle;
+static osSemaphoreId_t  BleTimerSemaphore;
+
+const osThreadAttr_t BleTimerTask_attributes = {
+  .name         = "BLE Timer Task",
+  .priority     = TASK_PRIO_BLE_TIMER,
+  .stack_size   = TASK_STACK_SIZE_BLE_TIMER,
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE,
+  .stack_mem    = TASK_DEFAULT_STACK_MEM
+};
+
+const osSemaphoreAttr_t BleTimerSemaphore_attributes = {
+  .name         = "BLE Timer Semaphore",
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE
+};
 
 /* Private functions prototype------------------------------------------------*/
-void BLE_TIMER_Background(void);
+static void BLE_TIMER_Background(void);
 static void BLE_TIMER_Callback(void* arg);
 static BLE_TIMER_t* BLE_TIMER_GetFromList(tListNode * listHead, uint16_t id);
-static void BleTimer_Task_Entry(void* thread_input);
+static void BLE_TIMER_Task_Entry(void* argument);
 
 void BLE_TIMER_Init(void)
 {
   /* This function initializes the timer Queue */
   LST_init_head(&BLE_TIMER_List);
 
-  /* Register Timer background task */
-  const osSemaphoreAttr_t BleTimerSemaphore_attributes = {
-    .name = "BLE timer Semaphore"
-  };
-  BleTimerSemaphore = osSemaphoreNew(1U, 0U, &BleTimerSemaphore_attributes);
-  if (BleTimerSemaphore == NULL)
-  {
-    Error_Handler();
-  }
-  const osThreadAttr_t BleTimerTask_attributes = {
-    .name = "BLE timer Task",
-    .priority = (osPriority_t)BLE_TIMER_TASK_PRIO,
-    .stack_size = BLE_TIMER_TASK_STACK_SIZE
-  };
-
-  BleTimerThread = osThreadNew(BleTimer_Task_Entry, NULL, &BleTimerTask_attributes);
-  if (BleTimerThread == NULL)
-  {
-    Error_Handler();
-  }
-
   /* Initialize the Timer Server */
   UTIL_TIMER_Init();
+
+  /* Create BLE Timer FreeRTOS objects */
+
+  BleTimerTaskHandle = osThreadNew(BLE_TIMER_Task_Entry, NULL, &BleTimerTask_attributes);
+
+  BleTimerSemaphore = osSemaphoreNew(1U, 0U, &BleTimerSemaphore_attributes);
+
+  if((BleTimerTaskHandle == NULL) || (BleTimerSemaphore == NULL) )
+  {
+    LOG_ERROR_APP( "BLE Timer FreeRTOS objects creation FAILED");
+    Error_Handler();
+  }
 }
 
 uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
@@ -96,7 +103,6 @@ uint8_t BLE_TIMER_Start(uint16_t id, uint32_t timeout)
 
   /* Create a new timer instance and add it to the list */
   BLE_TIMER_t *timer = NULL;
-
   if(AMM_ERROR_OK != AMM_Alloc (CFG_AMM_VIRTUAL_STACK_BLE,
                                 DIVC(sizeof(BLE_TIMER_t), sizeof(uint32_t)),
                                 (uint32_t **)&timer,
@@ -139,10 +145,10 @@ void BLE_TIMER_Stop(uint16_t id){
   }
 }
 
-void BLE_TIMER_Background(void)
+static void BLE_TIMER_Background(void)
 {
   BLEPLATCB_TimerExpiry( (uint16_t)BLE_TIMER_timer->id);
-  HostStack_Process( );
+  BleStackCB_Process();
 
   /* Delete the BLE_TIMER_timer from the list */
   LST_remove_node((tListNode *)BLE_TIMER_timer);
@@ -150,11 +156,11 @@ void BLE_TIMER_Background(void)
   (void)AMM_Free((uint32_t *)BLE_TIMER_timer);
 }
 
-static void BleTimer_Task_Entry(void* thread_input)
+static void BLE_TIMER_Task_Entry(void* argument)
 {
-  (void)(thread_input);
+  UNUSED(argument);
 
-  while(1)
+  for(;;)
   {
     osSemaphoreAcquire(BleTimerSemaphore, osWaitForever);
     BLE_TIMER_Background();

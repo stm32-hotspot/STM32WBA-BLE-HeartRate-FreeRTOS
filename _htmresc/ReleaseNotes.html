@@ -6,7 +6,7 @@
 
 <body style="font-size: 10pt; font-family: Verdana;">
 
-<h3 style="color: blue; text-decoration: underline;">STM32CubeWBA Firmware Package V1.3.0 / 07-February-2024</h3>
+<h3 style="color: blue; text-decoration: underline;">STM32CubeWBA Firmware Package V1.5.0RC1 / 20-September-2024</h3>
 
 <div style="margin-left: 18pt;">
 <p>
@@ -14,81 +14,88 @@
 </p>
 
 <p>
-<b>Official Release of STM32CubeWBA Firmware package supporting STM32WBA52xx and STM32WBA55xx devices</b>
+<b>Official Release of STM32CubeWBA Firmware package supporting STM32WBA50xx, STM32WBA52xx, STM32WBA54xx, STM32WBA5Mxx and STM32WBA55xx devices</b>
+</p>
+<p>
+<b>Security</b>
+</p>
+<p>
+- Minor updates in security applications (SBSFU and TFM) and related scripts.
 </p>
 <p>
 <b>Connectivity</b>
 </p>
 <p>
-- Adding support of BLE/Thread and BLE/Zigbee Concurrent Modes. 
+- External PA(+20dbm) is now supported on BLE using BLE_TransparentMode application. 
 </p>
 <p>
-- Bluetooth Low Energy new features: Connection Subrating / Channel Classification enhancement / Periodic Advertising Enhancement
+- New third-party MW support: FreeRTOS, mbedtls (mbedtls_alt) 
 </p>
 <p>
-- Bluetooth Low Energy compliancy with TCRL2023-1. 
+- Deployment of new directory structure using Common/WPAN directory for Connectivity Applications 
 </p>
 <p>
-- Bluetooth Low Energy Audio: Telephony Media Audio Profile : Call Terminal / Unicast Media Receiver / Call Gateway / Unicast Media Sender
+- HSE clock startup instabilities fixed with SW workaround (please refer to errata sheet) 
 </p>
 <p>
-- OpenThread: stack update to SHA-1 : 8bc25042ba5cde20605eec2a329c0dff575303f4 (07/07/2023)
+- OpenThread update to SHA-1: 4a0d6b7b6495a1e4e2e03ab7a4f8baa064df4a6e (June 11th 2024) 
 </p>
 <p>
-- Zigbee : Support of GreenPower proxy feature / Adding of additional information in the traces showing useful parameters like link key, cluster in use, end points. 
+- Zigbee Smart Energy support 
 </p>
 <p>
-- Application : BLE and Zigbee project are now supporting SMPS power supply by default.
+- 802.15.4 Antenna Diversity (Mac_802_15_4_Node_Antenna_Diversity application) 
+</p>
+<p>
+- Add Support of WBA5M (CEB Module) (Applications under B-WBA5M-WPAN) 
+</p>
+<p>
+- Advertising Coding Scheme Selection features added 
 </p>
 <b>Drivers</b>
 </p>
 <p>
-- CMSIS Device Drivers supporting STM32WBA52xx and STM32WBA55xx devices
+- CMSIS Device Drivers supporting STM32WBA50xx, STM32WBA52xx, STM32WBA54xx, STM32WBA5Mxx and STM32WBA55xx devices
 </p>
 <p>
 - HAL/LL Drivers available for all peripherals
 </p>
 <p>
-- BSP Drivers supporting NUCLEO-WBA52CG, NUCLEO-WBA55CG and STM32WBA55G-DK1 boards
+- BSP Drivers : Update STM32WBAxx_Nucleo and STM32WBA55G-DK1 BSP drivers to include latest corrections. Add B-WBA5M-WPAN BSP drivers.
 </p>
 <p>
-<b>Middlewares</b>
-</p>
-<p>
-- MW ST OpenBL V6.1.0 support
-</p>
-<p>
-- MW AzureRTOS v6.2.0 support
-</p>
-<p>
-- MW SBSFU/TFM support
-</p>
 
 <b>Projects</b>
 </p>
 <p>
-- NUCLEO-WBA55CG
+<b>- B-WBA5M-WPAN</b>
 </p>
 <p>
-- Update Applications demonstrating BLE, Zigbee, Thread and MAC 802.15.4 capabilities
+- Add new applications demonstrating BLE, Thread and Zigbee capabilities
 </p>
 <p>
-- Update Examples LL demonstrating IP peripherals with use of push-button to enable internal pull-up
+<b>- NUCLEO-WBA55CG</b>
 </p>
 <p>
-- NUCLEO-WBA52CG
+- Update Applications demonstrating BLE capabilities
 </p>
 <p>
-- Update Examples LL demonstrating IP peripherals with use of push-button to enable internal pull-up
+- Update Applications demonstrating Zigbee capabilities
 </p>
 <p>
-- STM32WBA55G-DK1
+- Update Applications demonstrating Thread capabilities
 </p>
 <p>
-- Add new applications demonstrating BLE Audio capabilities : BLE_Audio_TMAP_Unicast_Server, BLE_Audio_TMAP_Unicast_Client
+<b>- NUCLEO-WBA52CG</b>
 </p>
 <p>
-- Update applications demonstrating  BLE, Zigbee capabilities
+- Update Applications demonstrating SBSFU/TFM capabilities
+</p>
+<p>
+<b>- STM32WBA55G-DK1</b>
+</p>
+<p>
+- Update applications demonstrating BLE, Zigbee capabilities
 </p>
 </div>
 </body>

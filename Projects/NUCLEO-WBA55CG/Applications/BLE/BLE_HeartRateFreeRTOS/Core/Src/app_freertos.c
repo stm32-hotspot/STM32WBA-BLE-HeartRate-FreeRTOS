@@ -59,7 +59,7 @@ osThreadId_t HRSAPPMeasurementsTaskHandle;
 const osThreadAttr_t HRSAPPMeasurementsTask_attributes = {
   .name = "HRSAPPMeasurementsTask",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
+  .stack_size = 256 * 4
 };
 /* Definitions for advLowPowerTimer */
 osTimerId_t advLowPowerTimerHandle;
@@ -86,6 +86,16 @@ const osSemaphoreAttr_t HRSAPPMeasurementsSemaphore_attributes = {
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
+
+/* USER CODE BEGIN 4 */
+void vApplicationStackOverflowHook(xTaskHandle xTask, char *pcTaskName)
+{
+   /* Run time stack overflow checking is performed if
+   configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
+   called if a stack overflow is detected. */
+  Error_Handler();
+}
+/* USER CODE END 4 */
 
 /* USER CODE BEGIN 1 */
 /* Functions needed when configGENERATE_RUN_TIME_STATS is on */
@@ -171,7 +181,7 @@ void advertisingTask_Entry(void *argument)
   /* USER CODE BEGIN advertisingTask */
   uint16_t advCmd;
   uint8_t advCmdPrio;
-  /* Infinite loop */
+
   for(;;)
   {
     osMessageQueueGet(advertisingCmdQueueHandle, &advCmd, &advCmdPrio, osWaitForever);
@@ -208,11 +218,9 @@ void HRSAPPMeasurementsTask_Entry(void *argument)
   for(;;)
   {
     osSemaphoreAcquire(HRSAPPMeasurementsSemaphoreHandle, osWaitForever);
-    osMutexAcquire(LinkLayerMutex, osWaitForever);
-    
+
     HRS_APP_Measurements();
-    
-    osMutexRelease(LinkLayerMutex);
+
     osThreadYield();
   }
   /* USER CODE END HRSAPPMeasurementsTask */

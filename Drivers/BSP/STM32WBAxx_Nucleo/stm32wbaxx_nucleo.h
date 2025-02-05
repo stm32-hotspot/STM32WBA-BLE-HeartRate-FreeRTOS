@@ -141,7 +141,7 @@ typedef struct
   */
 #define STM32WBAxx_NUCLEO_BSP_VERSION_MAIN   (0x01U) /*!< [31:24] main version */
 #define STM32WBAxx_NUCLEO_BSP_VERSION_SUB1   (0x00U) /*!< [23:16] sub1 version */
-#define STM32WBAxx_NUCLEO_BSP_VERSION_SUB2   (0x02U) /*!< [15:8]  sub2 version */
+#define STM32WBAxx_NUCLEO_BSP_VERSION_SUB2   (0x03U) /*!< [15:8]  sub2 version */
 #define STM32WBAxx_NUCLEO_BSP_VERSION_RC     (0x00U) /*!< [7:0]  release candidate */
 #define STM32WBAxx_NUCLEO_BSP_VERSION       ((STM32WBAxx_NUCLEO_BSP_VERSION_MAIN << 24U)\
                                             |(STM32WBAxx_NUCLEO_BSP_VERSION_SUB1 << 16U)\
@@ -160,17 +160,9 @@ typedef struct
 #define LD1_GPIO_CLK_ENABLE()                  __HAL_RCC_GPIOB_CLK_ENABLE()
 #define LD1_PIN                                GPIO_PIN_4
 
-#if defined (STM32WBA55xx)
-/* STM32WBA55xx */
 #define LD2_GPIO_PORT                          GPIOA
 #define LD2_GPIO_CLK_ENABLE()                  __HAL_RCC_GPIOA_CLK_ENABLE()
 #define LD2_PIN                                GPIO_PIN_9
-#else
-/* STM32WBA52xx */
-#define LD2_GPIO_PORT                          GPIOB
-#define LD2_GPIO_CLK_ENABLE()                  __HAL_RCC_GPIOB_CLK_ENABLE()
-#define LD2_PIN                                GPIO_PIN_11
-#endif
 
 #define LD3_GPIO_PORT                          GPIOB
 #define LD3_GPIO_CLK_ENABLE()                  __HAL_RCC_GPIOB_CLK_ENABLE()

@@ -1,9 +1,9 @@
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * @file    service1_app.h
+  * @file    hrs_app.h
   * @author  MCD Application Team
-  * @brief   Header for service1_app.c
+  * @brief   Header for hrs_app.c
   ******************************************************************************
   * @attention
   *
@@ -77,6 +77,7 @@ void HRS_APP_Init(void);
 void HRS_APP_EvtRx(HRS_APP_ConnHandleNotEvt_t *p_Notification);
 /* USER CODE BEGIN EFP */
 void HRS_APP_Measurements(void);
+
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

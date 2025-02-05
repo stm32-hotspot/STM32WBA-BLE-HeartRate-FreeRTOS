@@ -6,8 +6,8 @@ This application demonstrates how to build a BLE application on STM32WBA5 with X
 This application is running on s **NUCLEO-WBA55CGA board**.
 
 It implements standard BLE HeartRate profile build thanks to: 
-- STM32CubeMX v6.11.1
-- STM32CubeWBA v1.3.1
+- STM32CubeMX v6.13.0
+- STM32CubeWBA v1.5.0
 - X-Cube-FreeRTOS v1.2.0
 
 Open firmware project with desired IDE, compile and flash the board.

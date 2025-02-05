@@ -18,25 +18,20 @@
   */
 /* USER CODE END Header */
 
-#include "app_common.h"
 #include "main.h"
-#include "ll_intf.h"
+#include "app_common.h"
+#include "app_conf.h"
+#include "log_module.h"
+#include "ll_intf_cmn.h"
 #include "ll_sys.h"
 #include "ll_sys_if.h"
-#include "cmsis_os2.h"
+#include "stm32_rtos.h"
+#include "utilities_common.h"
 #if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
 #include "temp_measurement.h"
 #endif /* (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1) */
 
 /* Private defines -----------------------------------------------------------*/
-
-/* LINK_LAYER_TASK related defines */
-#define LINK_LAYER_TASK_STACK_SIZE              (512 * 4)
-#define LINK_LAYER_TASK_PRIO                    (osPriorityNormal)
-
-/* LINK_LAYER_TEMP_MEAS_TASK related defines */
-#define LINK_LAYER_TEMP_MEAS_TASK_STACK_SIZE    (128 * 4)
-#define LINK_LAYER_TEMP_MEAS_TASK_PRIO          (osPriorityNormal)
 
 /* USER CODE BEGIN PD */
 
@@ -53,13 +48,49 @@
 /* USER CODE END PC */
 
 /* Private variables ---------------------------------------------------------*/
-/* LINK_LAYER_TEMP_MEAS_TASK related resources */
-osSemaphoreId_t         LinkLayerMeasSemaphore;
-osThreadId_t            LinkLayerMeasThread;
+/* FreeRTOS objects declaration */
 
-/* LINK_LAYER_TASK related resources */
-osSemaphoreId_t         LinkLayerSemaphore;
-osThreadId_t            LinkLayerThread;
+static osThreadId_t     LinkLayerTaskHandle;
+static osSemaphoreId_t  LinkLayerSemaphore;
+
+const osThreadAttr_t LinkLayerTask_attributes = {
+  .name         = "Link Layer Task",
+  .priority     = TASK_PRIO_LINK_LAYER,
+  .stack_size   = TASK_STACK_SIZE_LINK_LAYER,
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE,
+  .stack_mem    = TASK_DEFAULT_STACK_MEM
+};
+
+const osSemaphoreAttr_t LinkLayerSemaphore_attributes = {
+  .name         = "Link Layer Semaphore",
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE
+};
+
+#if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
+static osThreadId_t     TempMeasLLTaskHandle;
+static osSemaphoreId_t  TempMeasLLSemaphore;
+
+const osThreadAttr_t TempMeasLLTask_attributes = {
+  .name         = "Temperature Measurement LL Task",
+  .priority     = TASK_PRIO_TEMP_MEAS_LL,
+  .stack_size   = TASK_STACK_SIZE_TEMP_MEAS_LL,
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE,
+  .stack_mem    = TASK_DEFAULT_STACK_MEM
+};
+
+const osSemaphoreAttr_t TempMeasLLSemaphore_attributes = {
+  .name         = "Temperature Measurement LL Semaphore",
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE
+};
+#endif /* USE_TEMPERATURE_BASED_RADIO_CALIBRATION */
 
 /* USER CODE BEGIN PV */
 
@@ -67,8 +98,14 @@ osThreadId_t            LinkLayerThread;
 
 /* Global variables ----------------------------------------------------------*/
 
-/* LINK_LAYER_TASK related resources */
 osMutexId_t             LinkLayerMutex;
+
+const osMutexAttr_t LinkLayerMutex_attributes = {
+  .name         = "Link Layer Mutex",
+  .attr_bits    = TASK_DEFAULT_ATTR_BITS,
+  .cb_mem       = TASK_DEFAULT_CB_MEM,
+  .cb_size      = TASK_DEFAULT_CB_SIZE
+};
 
 /* USER CODE BEGIN GV */
 
@@ -78,6 +115,11 @@ osMutexId_t             LinkLayerMutex;
 #if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
 static void ll_sys_bg_temperature_measurement_init(void);
 #endif /* USE_TEMPERATURE_BASED_RADIO_CALIBRATION */
+static void ll_sys_sleep_clock_source_selection(void);
+#if (CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE == 0)
+static uint8_t ll_sys_BLE_sleep_clock_accuracy_selection(void);
+#endif /* CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE */
+void ll_sys_reset(void);
 
 /* USER CODE BEGIN PFP */
 
@@ -90,15 +132,14 @@ static void ll_sys_bg_temperature_measurement_init(void);
 /* USER CODE END EV */
 
 /* Functions Definition ------------------------------------------------------*/
-
 /**
  * @brief  Link Layer Task for FreeRTOS
  * @param  void *argument
  * @retval None
  */
-static void LinkLayerSys_Task_Entry(void *argument)
+static void LinkLayer_Task_Entry(void *argument)
 {
-  UNUSED( argument );
+  UNUSED(argument);
 
   for(;;)
   {
@@ -117,31 +158,17 @@ static void LinkLayerSys_Task_Entry(void *argument)
   */
 void ll_sys_bg_process_init(void)
 {
-  /* Tasks creation */
-  const osSemaphoreAttr_t LinkLayerSemaphore_attributes = {
-    .name = "LinkLayerSemaphore"
-  };
+  /* Create Link Layer FreeRTOS objects */
+
+  LinkLayerTaskHandle = osThreadNew(LinkLayer_Task_Entry, NULL, &LinkLayerTask_attributes);
+
   LinkLayerSemaphore = osSemaphoreNew(1U, 0U, &LinkLayerSemaphore_attributes);
-  if (LinkLayerSemaphore == NULL)
-  {
-    Error_Handler();
-  }
-  const osMutexAttr_t LinkLayerMutex_attributes = {
-    .name = "LinkLayer Mutex"
-  };
+
   LinkLayerMutex = osMutexNew(&LinkLayerMutex_attributes);
-  if (LinkLayerMutex == NULL)
+
+  if((LinkLayerTaskHandle == NULL) || (LinkLayerSemaphore == NULL) || (LinkLayerMutex == NULL))
   {
-    Error_Handler();
-  }
-  const osThreadAttr_t LinkLayerTask_attributes = {
-    .name = "Link Layer Task",
-    .priority = (osPriority_t) LINK_LAYER_TASK_PRIO,
-    .stack_size = LINK_LAYER_TASK_STACK_SIZE
-  };
-  LinkLayerThread = osThreadNew(LinkLayerSys_Task_Entry, NULL, &LinkLayerTask_attributes);
-  if (LinkLayerThread == NULL)
-  {
+    LOG_ERROR_APP( "Link Layer FreeRTOS objects creation FAILED");
     Error_Handler();
   }
 }
@@ -173,14 +200,144 @@ void ll_sys_schedule_bg_process_isr(void)
   */
 void ll_sys_config_params(void)
 {
-  uint16_t freq_value = 0;
-  uint32_t linklayer_slp_clk_src = LL_RCC_RADIOSLEEPSOURCE_NONE;
+/* USER CODE BEGIN ll_sys_config_params_0 */
+
+/* USER CODE END ll_sys_config_params_0 */
 
   /* Configure link layer behavior for low ISR use and next event scheduling method:
    * - SW low ISR is used.
    * - Next event is scheduled from ISR.
    */
-  ll_intf_config_ll_ctx_params(USE_RADIO_LOW_ISR, NEXT_EVENT_SCHEDULING_FROM_ISR);
+  ll_intf_cmn_config_ll_ctx_params(USE_RADIO_LOW_ISR, NEXT_EVENT_SCHEDULING_FROM_ISR);
+  /* Apply the selected link layer sleep timer source */
+  ll_sys_sleep_clock_source_selection();
+
+/* USER CODE BEGIN ll_sys_config_params_1 */
+
+/* USER CODE END ll_sys_config_params_1 */
+
+#if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
+  /* Initialize link layer temperature measurement background task */
+  ll_sys_bg_temperature_measurement_init();
+
+  /* Link layer IP uses temperature based calibration instead of periodic one */
+  ll_intf_cmn_set_temperature_sensor_state();
+#endif /* USE_TEMPERATURE_BASED_RADIO_CALIBRATION */
+
+  /* Link Layer power table */
+  ll_intf_cmn_select_tx_power_table(CFG_RF_TX_POWER_TABLE_ID);
+/* USER CODE BEGIN ll_sys_config_params_2 */
+
+/* USER CODE END ll_sys_config_params_2 */
+}
+
+#if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
+/**
+ * @brief  Temperature Measurement Task for FreeRTOS
+ * @param
+ * @retval None
+ */
+ static void TempMeasureLL_Task_Entry( void *argument )
+{
+  UNUSED(argument);
+
+  for(;;)
+  {
+    osSemaphoreAcquire(TempMeasLLSemaphore, osWaitForever);
+
+    TEMPMEAS_RequestTemperatureMeasurement();
+
+    osThreadYield();
+  }
+}
+
+/**
+  * @brief  Link Layer temperature request background process initialization
+  * @param  None
+  * @retval None
+  */
+void ll_sys_bg_temperature_measurement_init(void)
+{
+  /* Create Temperature Measurement Link Layer FreeRTOS objects */
+
+  TempMeasLLTaskHandle = osThreadNew(TempMeasureLL_Task_Entry, NULL, &TempMeasLLTask_attributes);
+
+  TempMeasLLSemaphore = osSemaphoreNew(1U, 0U, &TempMeasLLSemaphore_attributes);
+
+  if ((TempMeasLLTaskHandle == NULL) || (TempMeasLLSemaphore == NULL))
+  {
+    LOG_ERROR_APP( "Temperature Measurement Link Layer FreeRTOS objects creation FAILED");
+    Error_Handler();
+  }
+
+}
+
+/**
+  * @brief  Request backroud task processing for temperature measurement
+  * @param  None
+  * @retval None
+  */
+void ll_sys_bg_temperature_measurement(void)
+{
+  static uint8_t initial_temperature_acquisition = 0;
+
+  if(initial_temperature_acquisition == 0)
+  {
+    TEMPMEAS_RequestTemperatureMeasurement();
+    initial_temperature_acquisition = 1;
+  }
+  else
+  {
+    osSemaphoreRelease(TempMeasLLSemaphore);
+  }
+}
+
+#endif /* USE_TEMPERATURE_BASED_RADIO_CALIBRATION */
+
+#if (CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE == 0)
+uint8_t ll_sys_BLE_sleep_clock_accuracy_selection(void)
+{
+  uint8_t BLE_sleep_clock_accuracy = 0;
+  uint32_t RevID = LL_DBGMCU_GetRevisionID();
+  uint32_t linklayer_slp_clk_src = LL_RCC_RADIO_GetSleepTimerClockSource();
+
+  if(linklayer_slp_clk_src == LL_RCC_RADIOSLEEPSOURCE_LSE)
+  {
+    /* LSE selected as Link Layer sleep clock source.
+       Sleep clock accuracy is different regarding the WBA device ID and revision
+     */
+#if defined(STM32WBA52xx) || defined(STM32WBA54xx) || defined(STM32WBA55xx)
+    if(RevID == REV_ID_A)
+    {
+      BLE_sleep_clock_accuracy = STM32WBA5x_REV_ID_A_SCA_RANGE;
+    }
+    else if(RevID == REV_ID_B)
+    {
+      BLE_sleep_clock_accuracy = STM32WBA5x_REV_ID_B_SCA_RANGE;
+    }
+    else
+    {
+      /* Revision ID not supported, default value of 500ppm applied */
+      BLE_sleep_clock_accuracy = STM32WBA5x_DEFAULT_SCA_RANGE;
+    }
+#else
+    UNUSED(RevID);
+#endif /* defined(STM32WBA52xx) || defined(STM32WBA54xx) || defined(STM32WBA55xx) */
+  }
+  else
+  {
+    /* LSE is not the Link Layer sleep clock source, sleep clock accurcay default value is 500 ppm */
+    BLE_sleep_clock_accuracy = STM32WBA5x_DEFAULT_SCA_RANGE;
+  }
+
+  return BLE_sleep_clock_accuracy;
+}
+#endif /* CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE */
+
+void ll_sys_sleep_clock_source_selection(void)
+{
+  uint16_t freq_value = 0;
+  uint32_t linklayer_slp_clk_src = LL_RCC_RADIOSLEEPSOURCE_NONE;
 
   linklayer_slp_clk_src = LL_RCC_RADIO_GetSleepTimerClockSource();
   switch(linklayer_slp_clk_src)
@@ -202,87 +359,33 @@ void ll_sys_config_params(void)
       assert_param(0);
       break;
   }
-  ll_intf_le_select_slp_clk_src((uint8_t)linklayer_slp_clk_src, &freq_value);
-
-#if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
-  /* Initialize link layer temperature measurement background task */
-  ll_sys_bg_temperature_measurement_init();
-
-  /* Link layer IP uses temperature based calibration instead of periodic one */
-  ll_intf_set_temperature_sensor_state();
-#endif /* USE_TEMPERATURE_BASED_RADIO_CALIBRATION */
-
-  /* Link Layer power table */
-  ll_intf_select_tx_power_table(CFG_RF_TX_POWER_TABLE_ID);
+  ll_intf_cmn_le_select_slp_clk_src((uint8_t)linklayer_slp_clk_src, &freq_value);
 }
 
-#if (USE_TEMPERATURE_BASED_RADIO_CALIBRATION == 1)
-/**
- * @brief  Link Layer Temperature Measurement Task for FreeRTOS
- * @param
- * @retval None
- */
- static void LinkLayerTempMeasure_Task_Entry( void *argument )
+void ll_sys_reset(void)
 {
-  UNUSED( argument );
+/* USER CODE BEGIN ll_sys_reset_0 */
 
-  for(;;)
+/* USER CODE END ll_sys_reset_0 */
+#if (CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE == 0)
+  uint8_t bsca = 0;
+#endif /* CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE */
+
+  /* Apply the selected link layer sleep timer source */
+  ll_sys_sleep_clock_source_selection();
+
+  /* Configure the link layer sleep clock accuracy if different from the default one */
+#if (CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE != 0)
+  ll_intf_le_set_sleep_clock_accuracy(CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE);
+#else
+  bsca = ll_sys_BLE_sleep_clock_accuracy_selection();
+  if(bsca != STM32WBA5x_DEFAULT_SCA_RANGE)
   {
-    osSemaphoreAcquire(LinkLayerMeasSemaphore, osWaitForever);
-    osMutexAcquire(LinkLayerMutex, osWaitForever);
-    TEMPMEAS_RequestTemperatureMeasurement();
-    osMutexRelease(LinkLayerMutex);
-    osThreadYield();
+    ll_intf_le_set_sleep_clock_accuracy(bsca);
   }
+#endif /* CFG_RADIO_LSE_SLEEP_TIMER_CUSTOM_SCA_RANGE */
+
+/* USER CODE BEGIN ll_sys_reset_1 */
+
+/* USER CODE END ll_sys_reset_1 */
 }
-
-/**
-  * @brief  Link Layer temperature request background process initialization
-  * @param  None
-  * @retval None
-  */
-void ll_sys_bg_temperature_measurement_init(void)
-{
-
-  const osSemaphoreAttr_t LinkLayerMeasSemaphore_attributes = {
-    .name = "LinkLayerMeasSemaphore"
-  };
-  LinkLayerMeasSemaphore = osSemaphoreNew(1U, 0U, &LinkLayerMeasSemaphore_attributes);
-  if (LinkLayerMeasSemaphore == NULL)
-  {
-    Error_Handler();
-  }
-
-  const osThreadAttr_t LinkLayerMeasTask_attributes = {
-    .name = "LinkLayer Temp Measurement Task",
-    .priority = (osPriority_t) LINK_LAYER_TEMP_MEAS_TASK_PRIO,
-    .stack_size = LINK_LAYER_TEMP_MEAS_TASK_STACK_SIZE
-  };
-  LinkLayerMeasThread = osThreadNew(LinkLayerTempMeasure_Task_Entry, NULL, &LinkLayerMeasTask_attributes);
-  if (LinkLayerMeasThread == NULL)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief  Request backroud task processing for temperature measurement
-  * @param  None
-  * @retval None
-  */
-void ll_sys_bg_temperature_measurement(void)
-{
-  static uint8_t initial_temperature_acquisition = 0;
-
-  if(initial_temperature_acquisition == 0)
-  {
-    TEMPMEAS_RequestTemperatureMeasurement();
-    initial_temperature_acquisition = 1;
-  }
-  else
-  {
-    osSemaphoreRelease(LinkLayerMeasSemaphore);
-  }
-}
-
-#endif /* USE_TEMPERATURE_BASED_RADIO_CALIBRATION */

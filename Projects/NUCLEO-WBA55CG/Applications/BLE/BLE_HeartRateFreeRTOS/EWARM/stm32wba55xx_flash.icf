@@ -43,4 +43,4 @@ place in FLASH_region       { readonly };
 
 place in SRAM1_region       { block HEAP, block CSTACK };
 place in SRAM2_region       { };
-place in SRAM_region        { readwrite};
+place in SRAM_region        { readwrite };

@@ -1,6 +1,6 @@
 /*****************************************************************************
  * @file    bleplat.h
- * @author  MDG
+ *
  * @brief   This file contains the interface of the BLE platform layer
  *          (lower interface of the BLE stack library).
  *          It is included by the STM32WBX BLE stack library.
@@ -106,7 +106,8 @@ extern int BLEPLAT_NvmAdd( uint8_t type,
  * @param  offset: The offset from which the NVM starts the read an operation.
  * @param  data: The pointer to data read by the function
  * @param  size: The size of data to be read
- * @retval status (BLEPLAT_XX)
+ * @retval - if positive or zero, it is the number of copied bytes
+ *         - if negative, it is an error status (BLEPLAT_XX)
  */
 extern int BLEPLAT_NvmGet( uint8_t mode,
                            uint8_t type,
@@ -119,7 +120,9 @@ extern int BLEPLAT_NvmGet( uint8_t mode,
  * @param  offset: The offset from which the NVM starts the comparison
  * @param  data: The data to be compared with stored data in the NVM
  * @param  size: The size of data to be compared
- * @retval status (BLEPLAT_XX)
+ * @retval - if zero, the comparison was successful (BLEPLAT_OK)
+ *         - if positive, the comparison failed
+ *         - if negative, it is an error status (BLEPLAT_XX)
  */
 extern int BLEPLAT_NvmCompare( uint16_t offset,
                                const uint8_t* data,
@@ -221,6 +224,34 @@ extern void BLEPLAT_AesCmacSetKey( const uint8_t* key );
 extern void BLEPLAT_AesCmacCompute( const uint8_t* input,
                                     uint32_t input_length,
                                     uint8_t* output_tag );
+
+/**
+  * @brief  CCM computation
+  *
+  * @param  mode: CCM mode (0=encryption, 1=decryption)
+  * @param  key: AES encryption key (16 bytes)
+  * @param  iv_length: IV length (in bytes)
+  * @param  iv: IV data
+  * @param  add_length: add length (in bytes)
+  * @param  add: add data
+  * @param  input_length: input data length (in bytes)
+  * @param  inputL: original data (to be encrypted or decrypted)
+  * @param  tag_length: CCM tag length (in bytes)
+  * @param  tag: CCM tag
+  * @param  output: result data (encrypted or decrypted)
+  * @retval status (BLEPLAT_XX)
+  */
+extern int BLEPLAT_AesCcmCrypt( uint8_t mode,
+                                const uint8_t* key,
+                                uint8_t iv_length,
+                                const uint8_t* iv,
+                                uint16_t add_length,
+                                const uint8_t* add,
+                                uint32_t input_length,
+                                const uint8_t* input,
+                                uint8_t tag_length,
+                                uint8_t* tag,
+                                uint8_t* output );
 
 /* Random Number Generation (RNG) interface:
  */

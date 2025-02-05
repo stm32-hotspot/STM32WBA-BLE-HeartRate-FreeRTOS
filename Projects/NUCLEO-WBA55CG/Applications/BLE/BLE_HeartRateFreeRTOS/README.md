@@ -109,7 +109,7 @@ Connectivity, BLE, BLE protocol, BLE pairing, BLE profile, FreeRTOS
 ### __Hardware and Software environment__
 
   - This example runs on STM32WBA55xx devices.
-  - Connect the Nucleo Board to your PC with a USB cable type A to mini-B to ST-LINK connector (USB_STLINK). 
+  - Connect the Nucleo Board to your PC with a USB cable to ST-LINK connector (USB_STLINK). 
   - This application is by default configured to support low power mode ( No traces - No debugger ) 
   - Low Power configuration can be modified in app_conf.h (CFG_LPM_LEVEL)
 

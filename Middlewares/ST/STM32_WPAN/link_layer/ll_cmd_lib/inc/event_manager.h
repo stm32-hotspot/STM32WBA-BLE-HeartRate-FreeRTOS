@@ -1,4 +1,4 @@
-/*$Id: //dwh/bluetooth/DWC_ble154combo/firmware/rel/1.30a-SOW05Patchv6_2/firmware/public_inc/event_manager.h#1 $*/
+/*$Id: //dwh/bluetooth/DWC_ble154combo/firmware/rel/1.32a-lca02/firmware/public_inc/event_manager.h#2 $*/
 /**
  ********************************************************************************
  * @file    event_manager.h
@@ -72,6 +72,9 @@ typedef enum {
 #if ((SUPPORT_MASTER_CONNECTION) || (SUPPORT_SLAVE_CONNECTION))
 	CONN_EVENT, /*connection event handler ID*/
 	CONN_PARAM_UPDATE_EVENT, /* handler for connection parameter update initiated by link layer */
+#if ((SUPPORT_CONNECTED_ISOCHRONOUS) && (SUPPORT_MASTER_CONNECTION))
+	CONN_DATA_LEN_UPDATE_EVENT, /* handler for connection data length update initiated by link layer */
+#endif /*SUPPORT_CONNECTED_ISOCHRONOUS && SUPPORT_MASTER_CONNECTION*/
 #if(SUPPORT_CONNECTED_ISOCHRONOUS &&( SUPPORT_MASTER_CONNECTION || SUPPORT_SLAVE_CONNECTION))
 	CIS_EVENT,
 #endif /*SUPPORT_CONNECTED_ISOCHRONOUS*/
@@ -83,7 +86,7 @@ typedef enum {
 #endif /* SUPPORT_SYNC_ISOCHRONOUS */
 #endif /* SUPPORT_BRD_ISOCHRONOUS || SUPPORT_SYNC_ISOCHRONOUS */
 #endif /*SUPPORT_BLE*/
-#if ((SUPPORT_BLE)||(SUPPORT_MAC_HCI_UART)||(SUPPORT_ANT_HCI_UART) || (SUPPORT_AUG_MAC_HCI_UART))
+#if SUPPORT_BLE
 	HCI_HANDLER, /* handler for the HCI events; handling events from Host to HCI*/
 #endif /*SUPPORT_BLE*/
 #if SUPPORT_BLE
@@ -95,12 +98,16 @@ typedef enum {
 	PRDC_SCAN_TIMEOUT_EVENT, /*handler for periodic scan sync timeout */
 	PRDC_SCAN_CANCEL_EVENT,
 #endif /* SUPPORT_LE_PERIODIC_ADVERTISING */
+#if SUPPORT_LE_PAWR_ADVERTISER_ROLE
+	PAWR_SEND_FRST_REQ,
+#endif /* SUPPORT_LE_PAWR_ADVERTISER_ROLE */
 #endif /* SUPPORT_LE_EXTENDED_ADVERTISING */
 #endif /*SUPPORT_BLE*/
 #if SUPPORT_COEXISTENCE
 	COEX_TIMER_EVENT,
 #endif
 #if SUPPORT_MAC
+	RADIO_MAC_TX_DONE_EVENT,
 	RAL_SM_DONE_EVENT,
 	MAC_SM_DONE_EVENT,
 	ED_TMR_EVENT,
@@ -119,6 +126,12 @@ typedef enum {
 #if SUPPORT_EXPLCT_OBSERVER_ROLE || SUPPORT_MASTER_CONNECTION || SUPPORT_SYNC_ISOCHRONOUS  || (SUPPORT_AOA_AOD && SUPPORT_SLAVE_CONNECTION)
 	ADV_REPORT_EVENT,
 #endif /* SUPPORT_EXPLCT_OBSERVER_ROLE || SUPPORT_MASTER_CONNECTION || SUPPORT_SYNC_ISOCHRONOUS  || (SUPPORT_AOA_AOD && SUPPORT_SLAVE_CONNECTION) */
+#if (SUPPORT_CONNECTED_ISOCHRONOUS && (SUPPORT_MASTER_CONNECTION || SUPPORT_SLAVE_CONNECTION) || (SUPPORT_BRD_ISOCHRONOUS) || (SUPPORT_SYNC_ISOCHRONOUS))
+	HCI_SYNC_EVENT,
+#endif /* SYNC_EVENT */
+#if END_OF_RADIO_ACTIVITY_REPORTING
+	HCI_RADIO_ACTIVITY_EVENT,
+#endif /* END_OF_RADIO_ACTIVITY_REPORTING */
 #endif /* SUPPORT_HCI_EVENT_ONLY */
 #if ((SUPPORT_MAC) && (MAC_LAYER_BUILD))
 	MLME_TIMER_EVENT,
@@ -153,7 +166,6 @@ typedef enum {
 #if (NUM_OF_CTSM_EMNGR_HNDLS >= 3)
 	CUSTOM_HANDLE_3,
 #endif
-
 	MAX_EM_HANDLE
 } handler_t;
 /* Exported functions ------------------------------------------------------- */

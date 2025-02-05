@@ -121,6 +121,11 @@ typedef struct
   uint8_t       MaxMetadataLength;      /* Maximum Length of the buffer allocated for each ASE to store its
                                          * associated Metadata
                                          */
+  uint8_t       CachingEn;              /* ASE state Caching : Indicate if server caches the ASE codec configuration
+                                         * during autonomous Released operation when ASE is in Releasing state.
+                                         * Transition an ASE from Releasing state to the Idle state (CachingEn = 0)
+                                         * or the Codec Configured state (CachingEn = 1)
+                                         */
   uint8_t       *pStartRamAddr;         /* Start address of the RAM buffer allocated for memory resource of
                                          * Audio Stream Control
                                          * It must be a 32bit aligned RAM area.
@@ -423,6 +428,18 @@ typedef struct
 
 } BAP_ASE_State_Params_t;
 
+/* Audio Stream Endpoint Information associated to an Enable Operation request
+ */
+typedef struct
+{
+  uint8_t               ASE_ID;         /*Audio Stream Endpoint Identifier*/
+  ASE_Type_t            Type;           /*Source of Sink*/
+  ASE_State_t           State;          /*State of the ASE*/
+  uint8_t               MetadataLength; /* Length of data of the pMetadata*/
+  uint8_t               *pMetadata;     /* Pointer on Metadata*/
+
+} BAP_ASE_Enable_Req_Params_t;
+
 /* Audio Stream Endpoint Information including ASE ID, Type, State and associated parameters */
 typedef struct
 {
@@ -572,7 +589,7 @@ typedef struct
   uint8_t       BIGHandle;              /* The identifier of the BIG */
   uint8_t       NumBISes;               /* The number of BIS in the BIG */
   uint16_t      *pConnHandle;           /* The list of connection handles of all BISes in the BIG*/
-  uint32_t      TransportLatency;       /* Transport Latency in ms*/
+  uint32_t      TransportLatency;       /* Transport Latency in us*/
 }BAP_Create_BIG_Complete_Data;
 
 /* Structure passed in parameter of specific event when Audio Path is up during Broadcast Audio procedure.*/
@@ -589,7 +606,7 @@ typedef struct
   uint8_t       BIGHandle;              /* The identifier of the BIG */
   uint8_t       NumBISes;               /* The number of BIS in the BIG */
   uint16_t      *pConnHandle;           /* The list of connection handles of all BISes in the BIG */
-  uint32_t      TransportLatency;       /* Transport Latency in ms*/
+  uint32_t      TransportLatency;       /* Transport Latency in us*/
 }BAP_BIG_Sync_Established_Data_t;
 
 
@@ -774,7 +791,7 @@ typedef struct
   uint16_t                      CIS_ConnHandle;         /* CIS Connection Handle */
   BAP_Audio_Path_Direction_t    AudioPathDirection;     /* Input or Output */
   uint32_t                      ControllerDelay;        /* Controller Delay in us*/
-  uint32_t                      TransportLatency;       /* Transport Latency in ms*/
+  uint32_t                      TransportLatency;       /* Transport Latency in us*/
   BAP_AudioCodecConf_t          CodecConf;              /* Audio Codec Configuration */
 }BAP_Unicast_Audio_Path_t;
 

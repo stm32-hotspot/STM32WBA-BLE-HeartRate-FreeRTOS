@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
+  * Copyright (c) 2024 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -33,6 +33,9 @@
 #include "utilities_common.h"
 #include "cmsis_compiler.h"
 #include "peripheral_init.h"
+#if(CFG_RT_DEBUG_DTB == 1)
+#include "RTDebug_dtb.h"
+#endif /* CFG_RT_DEBUG_DTB */
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -88,6 +91,22 @@ static uint32_t boot_after_standby;
 /* USER CODE END EV */
 
 /* Private variables ---------------------------------------------------------*/
+#if (CFG_SCM_SUPPORTED == 0)
+/* If SCM is not supported, SRAM handles for waitsate configurations are defined here */
+static RAMCFG_HandleTypeDef sram1_ns =
+{
+  RAMCFG_SRAM1,           /* Instance */
+  HAL_RAMCFG_STATE_READY, /* RAMCFG State */
+  0U,                     /* RAMCFG Error Code */
+};
+
+static RAMCFG_HandleTypeDef sram2_ns =
+{
+  RAMCFG_SRAM2,           /* Instance */
+  HAL_RAMCFG_STATE_READY, /* RAMCFG State */
+  0U,                     /* RAMCFG Error Code */
+};
+#endif /* CFG_SCM_SUPPORTED */
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -106,11 +125,13 @@ static void Exit_Stop_Standby_Mode(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
+extern void LINKLAYER_PLAT_NotifyWFIExit(void);
+extern void LINKLAYER_PLAT_NotifyWFIEnter(void);
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
 
-__WEAK void Standby_Restore_GPIO(void)
+__WEAK OPTIMIZED void Standby_Restore_GPIO(void)
 {
   uint32_t temp;
 
@@ -175,7 +196,7 @@ __WEAK void Standby_Restore_GPIO(void)
   // ---------------------------------------------------------------------------
 }
 
-static void Enter_Stop_Standby_Mode(void)
+OPTIMIZED static void Enter_Stop_Standby_Mode(void)
 {
   /* Disabling ICACHE */
   LL_ICACHE_Disable();
@@ -189,6 +210,12 @@ static void Enter_Stop_Standby_Mode(void)
 
 #if (CFG_SCM_SUPPORTED == 1)
   scm_setwaitstates(LP);
+#else
+  /* SCM module is not supported, apply low power compatible waitstates */
+  __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_3);
+  while(__HAL_FLASH_GET_LATENCY() != FLASH_LATENCY_3);
+  HAL_RAMCFG_ConfigWaitState(&sram1_ns, RAMCFG_WAITSTATE_1);
+  HAL_RAMCFG_ConfigWaitState(&sram2_ns, RAMCFG_WAITSTATE_1);
 #endif /* CFG_SCM_SUPPORTED */
 
   LL_LPM_EnableDeepSleep();
@@ -196,29 +223,80 @@ static void Enter_Stop_Standby_Mode(void)
   while(LL_PWR_IsActiveFlag_ACTVOS( ) == 0);
 }
 
-static void Exit_Stop_Standby_Mode(void)
+OPTIMIZED static void Exit_Stop_Standby_Mode(void)
 {
   LL_ICACHE_Enable();
   while(LL_ICACHE_IsEnabled() == 0U);
 #if (CFG_SCM_SUPPORTED == 1)
   if (LL_PWR_IsActiveFlag_STOP() == 1U)
   {
+    /* SCM HSE BEGIN */
+    /* Clear SW_HSERDY, if needed */
+    if (isRadioActive () == SCM_RADIO_NOT_ACTIVE)
+    {
+      SCM_HSE_Clear_SW_HSERDY();
+    }
+    /* SCM HSE END */
+
     scm_setup();
   }
   else
   {
     scm_setwaitstates( RUN );
   }
+#else
+  if (LL_PWR_IsActiveFlag_STOP() == 1U)
+  {
+    /* Activate HSE clock */
+    LL_RCC_HSE_Enable();
+    while(LL_RCC_HSE_IsReady() == 0);
+
+    /* Apply PWR VOS1 power level */
+    LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+    while (LL_PWR_IsActiveFlag_VOS() == 0);
+
+    /* Switch HSE frequency from HSE16 to HSE32 */
+    LL_RCC_HSE_DisablePrescaler();
+
+    /* Switch CPU system clock to HSE */
+    LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSE);
+    while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSE);
+
+    /* Apply HSE32 compatible waitstates */
+    __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_0);
+    while(__HAL_FLASH_GET_LATENCY() != FLASH_LATENCY_0);
+    HAL_RAMCFG_ConfigWaitState(&sram1_ns, RAMCFG_WAITSTATE_0);
+    HAL_RAMCFG_ConfigWaitState(&sram2_ns, RAMCFG_WAITSTATE_0);
+
+    /* Set HDIV 5 */
+    LL_RCC_SetAHB5Divider(LL_RCC_AHB5_DIVIDER_1); /* divided by 1 */
+
+    /* Ensure time base clock coherency */
+    SystemCoreClockUpdate();
+  }
+  else
+  {
+    /* Apply waitsates for HSE32 configuration */
+    __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_0);
+    while(__HAL_FLASH_GET_LATENCY() != FLASH_LATENCY_0);
+    HAL_RAMCFG_ConfigWaitState(&sram1_ns, RAMCFG_WAITSTATE_0);
+    HAL_RAMCFG_ConfigWaitState(&sram2_ns, RAMCFG_WAITSTATE_0);
+  }
 #endif /* CFG_SCM_SUPPORTED */
 }
 
-void PWR_EnterOffMode( void )
+OPTIMIZED void PWR_EnterOffMode( void )
 {
   SYSTEM_DEBUG_SIGNAL_SET(LOW_POWER_STANDBY_MODE_ENTER);
 
   /* USER CODE BEGIN PWR_EnterOffMode_1 */
 
   /* USER CODE END PWR_EnterOffMode_1 */
+
+  /* Notify the Link Layer platform layer the system will enter in WFI
+   * and AHB5 clock may be turned of regarding the 2.4Ghz radio state
+   */
+  LINKLAYER_PLAT_NotifyWFIEnter();
 
   /*
    * There is no risk to clear all the WUF here because in the current implementation, this API is called
@@ -269,8 +347,16 @@ void PWR_EnterOffMode( void )
   __set_PSPLIM(backup_PSPLIM);
   __set_PSP(backup_PSP);
   __set_CONTROL(backup_CONTROL); /* SP may switch back to PSP */
+#if(CFG_RT_DEBUG_DTB == 1)
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
-  SYSTEM_DEBUG_SIGNAL_RESET(LOW_POWER_STANDBY_MODE_ACTIVE);
+  Standby_Restore_GPIO();
+
+  RT_DEBUG_DTBInit();
+  RT_DEBUG_DTBConfig();
+#endif /* CFG_RT_DEBUG_DTB */
 
   /* USER CODE BEGIN PWR_EnterOffMode_2 */
 
@@ -278,7 +364,7 @@ void PWR_EnterOffMode( void )
 
 }
 
-void PWR_ExitOffMode( void )
+OPTIMIZED void PWR_ExitOffMode( void )
 {
   /* USER CODE BEGIN PWR_ExitOffMode_1 */
 
@@ -287,6 +373,12 @@ void PWR_ExitOffMode( void )
   if ( 1UL == boot_after_standby )
   {
     boot_after_standby = 0;
+
+#if (CFG_SCM_SUPPORTED == 1)
+    /* SCM HSE BEGIN */
+    SCM_HSE_Clear_SW_HSERDY();
+    /* SCM HSE END */
+#endif /* CFG_SCM_SUPPORTED */
 
     HAL_NVIC_SetPriority(RADIO_INTR_NUM, RADIO_INTR_PRIO_LOW, 0);
     HAL_NVIC_EnableIRQ(RADIO_INTR_NUM);
@@ -312,14 +404,22 @@ void PWR_ExitOffMode( void )
     /* Enable AHB5ENR peripheral clock (bus CLK) */
     __HAL_RCC_RADIO_CLK_ENABLE();
 
+    /* Notify the Link Layer platform layer the system exited WFI
+     * and AHB5 clock may be resynchronized as is may have been
+     * turned of during low power mode entry.
+     */
+    LINKLAYER_PLAT_NotifyWFIExit();
+
+    /* USER CODE BEGIN PWR_ExitOffMode_2 */
+
+    /* USER CODE END PWR_ExitOffMode_2 */
+
     /* Apply Prefetch configuration is enabled */
 #if (PREFETCH_ENABLE != 0U)
   __HAL_FLASH_PREFETCH_BUFFER_ENABLE();
 #endif /* PREFETCH_ENABLE */
 
-    Standby_Restore_GPIO();
-
-    MX_StandbyExit_PeripharalInit();
+    MX_StandbyExit_PeripheralInit();
 
     SYSTEM_DEBUG_SIGNAL_RESET(LOW_POWER_STANDBY_MODE_ACTIVE);
     SYSTEM_DEBUG_SIGNAL_SET(LOW_POWER_STANDBY_MODE_EXIT);
@@ -327,6 +427,33 @@ void PWR_ExitOffMode( void )
     /* Restore system clock configuration */
 #if (CFG_SCM_SUPPORTED == 1)
     scm_standbyexit();
+#else
+    /* Activate HSE clock */
+    LL_RCC_HSE_Enable();
+    while(LL_RCC_HSE_IsReady() == 0);
+
+    /* Apply PWR VOS1 power level */
+    LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+    while (LL_PWR_IsActiveFlag_VOS() == 0);
+
+    /* Switch HSE frequency from HSE16 to HSE32 */
+    LL_RCC_HSE_DisablePrescaler();
+
+    /* Switch CPU system clock to HSE */
+    LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSE);
+    while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSE);
+
+    /* Apply HSE32 compatible waitstates */
+    __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_0);
+    while(__HAL_FLASH_GET_LATENCY() != FLASH_LATENCY_0);
+    HAL_RAMCFG_ConfigWaitState(&sram1_ns, RAMCFG_WAITSTATE_0);
+    HAL_RAMCFG_ConfigWaitState(&sram2_ns, RAMCFG_WAITSTATE_0);
+
+    /* Set HDIV 5 */
+    LL_RCC_SetAHB5Divider(LL_RCC_AHB5_DIVIDER_1); /* divided by 1 */
+
+    /* Ensure time base clock coherency */
+    SystemCoreClockUpdate();
 #endif /* CFG_SCM_SUPPORTED */
 
     /* Enable RTC peripheral clock */
@@ -346,20 +473,25 @@ void PWR_ExitOffMode( void )
     Exit_Stop_Standby_Mode();
   }
 
-  /* USER CODE BEGIN PWR_ExitOffMode_2 */
+  /* USER CODE BEGIN PWR_ExitOffMode_3 */
 
-  /* USER CODE END PWR_ExitOffMode_2 */
+  /* USER CODE END PWR_ExitOffMode_3 */
 
   SYSTEM_DEBUG_SIGNAL_RESET(LOW_POWER_STANDBY_MODE_EXIT);
 }
 
-void PWR_EnterStopMode( void )
+OPTIMIZED void PWR_EnterStopMode( void )
 {
   SYSTEM_DEBUG_SIGNAL_SET(LOW_POWER_STOP_MODE_ENTER);
 
   /* USER CODE BEGIN PWR_EnterStopMode_1 */
 
   /* USER CODE END PWR_EnterStopMode_1 */
+
+  /* Notify the Link Layer platform layer the system will enter in WFI
+   * and AHB5 clock may be turned of regarding the 2.4Ghz radio state
+   */
+  LINKLAYER_PLAT_NotifyWFIEnter();
 
   Enter_Stop_Standby_Mode();
 
@@ -377,7 +509,7 @@ void PWR_EnterStopMode( void )
   SYSTEM_DEBUG_SIGNAL_SET(LOW_POWER_STOP_MODE_ACTIVE);
 }
 
-void PWR_ExitStopMode( void )
+OPTIMIZED void PWR_ExitStopMode( void )
 {
   SYSTEM_DEBUG_SIGNAL_RESET(LOW_POWER_STOP_MODE_ACTIVE);
   SYSTEM_DEBUG_SIGNAL_SET(LOW_POWER_STOP_MODE_EXIT);
@@ -385,6 +517,12 @@ void PWR_ExitStopMode( void )
   /* USER CODE BEGIN PWR_ExitStopMode_1 */
 
   /* USER CODE END PWR_ExitStopMode_1 */
+
+  /* Notify the Link Layer platform layer the system exited WFI
+   * and AHB5 clock may be resynchronized as is may have been
+   * turned of during low power mode entry.
+   */
+  LINKLAYER_PLAT_NotifyWFIExit();
 
   Exit_Stop_Standby_Mode();
 
@@ -401,6 +539,11 @@ void PWR_EnterSleepMode( void )
 
   /* USER CODE END PWR_EnterSleepMode_1 */
 
+  /* Notify the Link Layer platform layer the system will enter in WFI
+   * and AHB5 clock may be turned of regarding the 2.4Ghz radio state
+   */
+  LINKLAYER_PLAT_NotifyWFIEnter();
+
   LL_LPM_EnableSleep();
   __WFI();
 
@@ -414,11 +557,17 @@ void PWR_ExitSleepMode( void )
   /* USER CODE BEGIN PWR_ExitSleepMode */
 
   /* USER CODE END PWR_ExitSleepMode */
+
+  /* Notify the Link Layer platform layer the system exited WFI
+   * and AHB5 clock may be resynchronized as is may have been
+   * turned of during low power mode entry.
+   */
+  LINKLAYER_PLAT_NotifyWFIExit();
 }
 
 uint32_t is_boot_from_standby(void)
 {
-#if (CFG_DEBUGGER_LEVEL > 1)
+#if (CFG_DEBUGGER_LEVEL <= 1)
   LL_DBGMCU_DisableDBGStopMode();
   LL_DBGMCU_DisableDBGStandbyMode();
 #endif /* CFG_DEBUGGER_LEVEL */
@@ -444,16 +593,6 @@ uint32_t is_boot_from_standby(void)
   }
 
   return boot_after_standby;
-}
-
-__weak void enter_standby_notification(void)
-{
-  /* User code here */
-}
-
-__weak void exit_standby_notification(void)
-{
-  /* User code here */
 }
 
 /* Private user code ---------------------------------------------------------*/

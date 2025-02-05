@@ -46,7 +46,7 @@ typedef enum
   APP_BLE_ADV_LP,
   APP_BLE_ADV_NON_CONN_FAST,
   APP_BLE_ADV_NON_CONN_LP,
-  /* USER CODE BEGIN APP_BLE_ConnStatus_t*/
+  /* USER CODE BEGIN APP_BLE_ConnStatus_t */
 
   /* USER CODE END APP_BLE_ConnStatus_t */
 } APP_BLE_ConnStatus_t;
@@ -84,7 +84,7 @@ typedef enum
   PROC_GAP_GEN_PHY_TOGGLE,
   PROC_GAP_GEN_CONN_TERMINATE,
   PROC_GATT_EXCHANGE_CONFIG,
-  /* USER CODE BEGIN ProcGapGeneralId_t*/
+  /* USER CODE BEGIN ProcGapGeneralId_t */
 
   /* USER CODE END ProcGapGeneralId_t */
 }ProcGapGeneralId_t;
@@ -137,7 +137,8 @@ enum
 **/
 enum
 {
-  BOARD_ID_NUCLEO_WBA =  0x8B
+  BOARD_ID_NUCLEO_WBA5X =  0x8B,
+  BOARD_ID_DK_WBA5X     =  0x8C
 };
 
 /** 
@@ -156,11 +157,8 @@ enum
 
 /* External variables --------------------------------------------------------*/
 
-/* BLE_STACK_TASK related resources */
-extern osSemaphoreId_t         BleStackSemaphore;
-
-/* HCI_ASYNC_EVT_TASK related resources */
-extern osSemaphoreId_t         HCIasyncEvtSemaphore;
+extern osSemaphoreId_t    BleHostSemaphore;
+extern osSemaphoreId_t    GapProcCompleteSemaphore;
 
 /* USER CODE BEGIN EV */
 
@@ -172,6 +170,12 @@ extern osSemaphoreId_t         HCIasyncEvtSemaphore;
 #define CONN_INT_MS(x) ((uint16_t)((x)/1.25f))
 #define CONN_SUP_TIMEOUT_MS(x) ((uint16_t)((x)/10.0f))
 #define CONN_CE_LENGTH_MS(x) ((uint16_t)((x)/0.625f))
+
+#define HCI_LE_ADVERTISING_REPORT_RSSI(p) \
+        (*(int8_t*)((&((hci_le_advertising_report_event_rp0*)(p))-> \
+                      Advertising_Report[0].Length_Data) + 1 + \
+                    ((hci_le_advertising_report_event_rp0*)(p))-> \
+                    Advertising_Report[0].Length_Data))
 /* USER CODE BEGIN EM */
 
 /* USER CODE END EM */
@@ -181,6 +185,7 @@ void APP_BLE_Init(void);
 APP_BLE_ConnStatus_t APP_BLE_Get_Server_Connection_Status(void);
 void APP_BLE_Procedure_Gap_General(ProcGapGeneralId_t ProcGapGeneralId);
 void APP_BLE_Procedure_Gap_Peripheral(ProcGapPeripheralId_t ProcGapPeripheralId);
+const uint8_t* BleGetBdAddress(void);
 /* USER CODE BEGIN EFP */
 void APP_BLE_AdvStart(void);
 void APP_BLE_AdvLowPower(void);
